@@ -11,6 +11,11 @@ Requisitos:
 
 import json
 
+import mysql.connector
+from mysql.connector import Error
+from decouple import config
+
+
 #Clase base
 class Colaborador: 
     '''
@@ -155,9 +160,37 @@ class ColaboradorTiempoParcial(Colaborador):
 
 #Gestion
 class GestionColaboradores:
-    def __init__(self, archivo) -> None:
-        self.archivo = archivo
+    def __init__(self) -> None:
+        '''
+        Settea las variables necesarias para crear una conexión
+        al instanciar un objeto de clase GestionColaboradores
+        '''
+        self.host = config('DB_HOST')
+        self.database = config('DB_NAME')
+        self.user = config('DB_USER')
+        self.password = config('DB_PASSWORD')
+        self.port = config('DB_PORT')
     
+    def connect(self):
+        '''
+        Método para establecer la conexión con la BBDD
+        '''
+        try:
+            connection = mysql.connector.connect(
+                host = self.host,
+                database = self.database,
+                user = self.user,  
+                password = self.password,
+                port = self.port
+            )
+
+            if connection.is_connected():
+                return connection
+            
+        except Error as e:
+            print(f'Error al conectarse a la BBDD: {e}')
+            return None
+###
     def leer_datos(self):
         '''
         Trae los datos del JSON
@@ -180,7 +213,7 @@ class GestionColaboradores:
             print(f'Error al intentar guardar los datos en {self.archivo} - error: {e}')
         except Exception as e:
             print(f'Error inesperado: {e}')
-
+###
     def crear_colaborador(self, colaborador):
         '''
         Este método va a recibir una instancia de Colaborador cuando llamemos desde main.py. Es decir, recibirá un input desde el usuario
@@ -189,14 +222,47 @@ class GestionColaboradores:
         El parámetro colaborador del método es a su vez una instancia de las subclases
         '''
         try:
-            datos = self.leer_datos() ### Lee todo lo que contiene el JSON en ese momento
-            dni = colaborador.dni ### Validacion con DNI
-            if not str(dni) in datos.keys(): ### Si no existe en datos, se crea
-                datos[dni] = colaborador.to_dict() ### Trae todos los campos de la instancia de la subclase
-                self.guardar_datos(datos) ### Todos los datos junto con lo que agregamos ahora
-                print(f'Guardado exitoso')
-            else:
-                print(f'{colaborador.dni} ya existente')
+            connection = self.connect() ### Crea (recibe) una conexión del método antes definido
+            with connection.cursor() as cursor: ### El método cursor() permite realizar consultas a la BBDD
+                ## Verificar si el DNI ya existe
+                cursor.execute('SELECT dni FROM colaboradores WHERE dni = %s', (colaborador.dni, )) ### Con el comando (comodín) evitamos inyecciones SQL /// Se le pone una coma al final porque el método espera una tupla
+                if cursor.fetchone(): ### Trae el primer registro encontrado (los DNI son únicos)
+                    print(f'Ya existe el colaborador con el dni: {colaborador.dni}')
+                    return 
+                ## Insertar colaborador dependiendo del tipo
+                if isinstance(colaborador, ColaboradorTiempoCompleto):
+                    query = '''
+                    INSERT INTO colaboradores (dni, nombre, apellido, edad, salario)
+                    VALUES (%s, %s, %s, %s, %s)
+                    '''
+
+                    cursor.execute(query, (colaborador.dni, colaborador.nombre, colaborador.apellido,
+                                           colaborador.edad, colaborador.salario))
+                    
+                    query = '''
+                    INSERT INTO colaboradortiempocompleto (dni, departamento)
+                    VALUES (%s, %s)
+                    '''
+
+                    cursor.execute(query, (colaborador.dni, colaborador.departamento))
+                elif isinstance(colaborador, ColaboradorTiempoParcial):
+                    query = '''
+                    INSERT INTO colaboradores (dni, nombre, apellido, edad, salario)
+                    VALUES (%s, %s, %s, %s, %s)
+                    '''
+
+                    cursor.execute(query, (colaborador.dni, colaborador.nombre, colaborador.apellido,
+                                           colaborador.edad, colaborador.salario))
+                    
+                    query = '''
+                    INSERT INTO colaboradortiempoparcial (dni, Horas_semanales)
+                    VALUES (%s, %s)
+                    '''
+
+                    cursor.execute(query, (colaborador.dni, colaborador.horas_semanales))
+                ## Guardar la consulta en la BBDD
+                connection.commit()
+                print(f'Colaborador {colaborador.nombre} {colaborador.apellido} creado con éxito')
         except Exception as e:
             print(f'Error inesperado al crear colaborador: {e}')
 
