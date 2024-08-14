@@ -268,29 +268,44 @@ class GestionColaboradores:
 
     def leer_colaborador(self, dni):
         '''
-        Método para buscar el colaborador (mediante CRUD o en el JSON según cómo lo apliquemos)
+        Método para buscar el colaborador mediante CRUD
         '''
-
         try:
             '''
-            Lee los datos (del JSON) y busca una key con dni
+            Hace una consulta con un DNI dado
             Si la encuentro, crea una variable para guardar los datos 
             Evalua si está presente departamento, si es así, crea una 
             instancia de ColaboradorTiempoCompleto
             '''
-            datos = self.leer_datos()
-            if dni in datos:
-                colaborador_data = datos[dni]
-                if 'departamento' in colaborador_data:
-                    colaborador = ColaboradorTiempoCompleto(**colaborador_data) ##Desempaquetador porque es un diccionario
-                else:
-                    colaborador = ColaboradorTiempoParcial(**colaborador_data)
-                print(f'Colaborador encontrado con DNI {dni}')
-            else:
-                print(f'Colaborador no encontrado con DNI {dni}')
+            connection = self.connect()
+            if connection:
+                with connection.cursor(dictionary=True) as cursor: ### Cuando el cursor devuelve la consulta lo hará en formato diccionario
+                    cursor.execute('SELECT * FROM colaboradores WHERE dni = %s', (dni,)) ### Para que Python "entienda" que es una estructura de datos tipo tupla de un solo elemento se le agrega ","
+                    colaborador_data = cursor.fetchone()
 
-        except Exception as e:
-            print(f'Error inesperado: {e}')
+                    if colaborador_data:
+                        cursor.execute('SELECT departamento FROM colaboradortiempocompleto WHERE dni = %s', (dni,))
+                        departamento = cursor.fetchone()
+
+                        if departamento:
+                            colaborador_data['departamento'] = departamento['departamento'] ### Agrega al diccionario del colaborador la información 'departamento' si la hubiese (consulta anterior)
+                            colaborador = ColaboradorTiempoCompleto(**colaborador_data) ### Pasamos todos los datos para instanciar un colaborador
+                        else: ### Quiere decir que es de tiempo parcial
+                            cursor.execute('SELECT horas_semanales FROM colaboradortiempoparcial WHERE dni = %s', (dni,))
+                            horas_semanales = cursor.fetchone()
+                            if horas_semanales:
+                                colaborador_data['horas_semanales'] = horas_semanales['horas_semanales'] ### Agrega al diccionario del colaborador la información 'departamento' si la hubiese (consulta anterior)
+                                colaborador = ColaboradorTiempoParcial(**colaborador_data)
+                            else:
+                                colaborador = Colaborador(**colaborador_data)
+                        print(f'Colaborador encontrado: {colaborador}')
+                    else:
+                        print(f'No se encontró el colaborador con DNI: {dni}')
+        except Error as e:
+            print(f'Error al leer colaborador: {e}')
+        finally:
+            if connection.is_connected():
+                connection.close()
 
     def actualizar_colaborador(self, dni, nuevo_salario):
         try:

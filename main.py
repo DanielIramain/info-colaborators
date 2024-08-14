@@ -65,7 +65,7 @@ def agregar_colaborador(gestion: GestionColaboradores, tipo_colaborador):
     except Exception as e:
         print(f'Error inesperado: {e}')
 
-def buscar_colaborador_por_dni(gestion):
+def buscar_colaborador_por_dni(gestion: GestionColaboradores):
     dni = input('Ingrese el DNI del colaborador a buscar: ')
     gestion.leer_colaborador(dni)
     input('Presione una tecla para continuar...')
@@ -96,8 +96,7 @@ Cuando 'detecta' que se está ejecutando este archivo,
 corre esta porción de código:
 '''
 if __name__ == '__main__':
-    archivo_colaboradores = 'colaboradores_db.json' # De momento este archivo no existe, vamos a crearlo via código
-    gestion_colaboradores = GestionColaboradores(archivo_colaboradores) # Instancia de la clase que implementa el CRUD // la búsqueda en JSON
+    gestion_colaboradores = GestionColaboradores() ### Instancia de la clase que implementa el CRUD
 
     while True:
         limpiar_pantalla()
