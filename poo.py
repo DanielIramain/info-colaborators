@@ -139,7 +139,7 @@ class ColaboradorTiempoCompleto(Colaborador):
         return data
 
     def __str__(self) -> str:
-        return f'{super().__str__()} + departamento: {self.departamento}' ### Devuelve el str de la clase base y se le agrega el departamento.
+        return f'{super().__str__()}' + f' departamento: {self.departamento}' ### Devuelve el str de la clase base y se le agrega el departamento.
     
 class ColaboradorTiempoParcial(Colaborador):
     def __init__(self, dni, nombre, apellido, edad, salario, horas_semanales) -> None:
@@ -308,17 +308,33 @@ class GestionColaboradores:
                 connection.close()
 
     def actualizar_colaborador(self, dni, nuevo_salario):
+        '''
+        Actualizar el salario del colaborador en la BBDD
+        '''
         try:
-            datos = self.leer_datos()
-            ###Si existe el DNI accedemos a los datos y sobreescribimos el salario. Luego guardamos.
-            if str(dni) in datos.keys():
-                datos[dni]['salario'] = nuevo_salario
-                self.guardar_datos(datos)
-                print(f'Salario actualizado correctamente para el colaborador {dni}')
-            else:
-                print(f'No se encontró al colaborador {dni}')
+            connection = self.connect()
+            if  connection: ### Chequeamos que exista la conexión
+                with connection.cursor() as cursor:
+                    ### Verificar si existe DNI
+                    cursor.execute('SELECT * FROM colaboradores WHERE dni = %s', (dni,))
+                    if not cursor.fetchone(): ### Si no se encontró información es porque no existe ese DNI
+                        print(f'No se encontró colaborador con DNI: {dni}')
+                        return
+                    
+                    ### Actualizar el salario (si encuentra)
+                    cursor.execute('UPDATE colaboradores SET salario = %s WHERE dni = %s', (nuevo_salario, dni))
+
+                    if cursor.rowcount > 0: ### Si no tiene filas vacías es porque encontró un dato (es una validación)
+                        connection.commit()
+                        print(f'El nuevo salario {nuevo_salario} se actualizó correctamente para el colaborador con DNI {dni}')
+                    else:
+                        print(f'No se encontró colaborador con DNI {dni}')
+
         except Exception as e:
             print(f'Error al actualizar el colaborador: {e}')
+        finally:
+            if connection.is_connected():
+                connection.close()
 
     def eliminar_colaborador(self, dni):
         try:
