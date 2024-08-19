@@ -76,7 +76,7 @@ def actualizar_salario_colaborador(gestion):
     gestion.actualizar_colaborador(dni, salario)
     input('Presione una tecla para continuar...')
 
-def eliminar_colaborador_por_dni(gestion):
+def eliminar_colaborador_por_dni(gestion: GestionColaboradores):
     dni = input('Ingrese el DNI del colaborador a eliminar: ')
     gestion.eliminar_colaborador(dni)
     input('Presione una tecla para continuar...')

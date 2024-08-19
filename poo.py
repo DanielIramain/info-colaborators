@@ -338,13 +338,27 @@ class GestionColaboradores:
 
     def eliminar_colaborador(self, dni):
         try:
-            datos = self.leer_datos()
-            ###Si existe el DNI accedemos a los datos y sobreescribimos el salario. Luego guardamos.
-            if str(dni) in datos.keys():
-                del datos[dni] # Elimina del espacio en memoria de JSON el objeto completo
-                self.guardar_datos(datos) # Para que persista debemos guardar los datos
-                print(f'Colaborador {dni} borrado correctamente')
-            else:
-                print(f'No se encontró al colaborador {dni}')
+            connection = self.connect()
+            if connection:
+                with connection.cursor() as cursor:
+                    ### Verificar si existe el DNI
+                    cursor.execute('SELECT * FROM colaboradores WHERE dni = %s', (dni,))
+                    if not cursor.fetchone():
+                        print(f'No se encontró colaborador con DNI {dni}')
+                        return 
+                    
+                    ### Eliminar colaborador
+                    cursor.execute('DELETE FROM colaboradortiempocompleto WHERE dni = %s', (dni,))
+                    cursor.execute('DELETE FROM colaboradortiempoparcial WHERE dni = %s', (dni,))
+                    cursor.execute('DELETE FROM colaboradores WHERE dni = %s', (dni,))
+                    
+                    if cursor.rowcount > 0: ### Retorna la respuesta a la última consulta realizada
+                        connection.commit()
+                        print(f'El colaborador con DNI {dni} se eliminó correctamente')
+                    else:
+                        print(f'No se encontró colaborador con el siguiente DNI: {dni}')
         except Exception as e:
             print(f'Error al eliminar el colaborador: {e}')
+        finally:
+            if connection.is_connected():
+                connection.close()
