@@ -65,7 +65,7 @@ def agregar_colaborador(gestion: GestionColaboradores, tipo_colaborador):
     except Exception as e:
         print(f'Error inesperado: {e}')
 
-def buscar_colaborador_por_dni(gestion):
+def buscar_colaborador_por_dni(gestion: GestionColaboradores):
     dni = input('Ingrese el DNI del colaborador a buscar: ')
     gestion.leer_colaborador(dni)
     input('Presione una tecla para continuar...')
@@ -76,28 +76,33 @@ def actualizar_salario_colaborador(gestion):
     gestion.actualizar_colaborador(dni, salario)
     input('Presione una tecla para continuar...')
 
-def eliminar_colaborador_por_dni(gestion):
+def eliminar_colaborador_por_dni(gestion: GestionColaboradores):
     dni = input('Ingrese el DNI del colaborador a eliminar: ')
     gestion.eliminar_colaborador(dni)
     input('Presione una tecla para continuar...')
 
-def mostrar_todos_los_colaboradores(gestion):
-    print('=== Listado completo de colaboradores ===')
-    for colaborador in gestion.leer_datos().values():
-        if 'departamento' in colaborador:
-            print(f"{colaborador['nombre']} - Departamento: {colaborador['departamento']}")
-        else:
-            print(f"{colaborador['nombre']} - Horas semanales: {colaborador['horas semanales']}")
-    print('=== /// === /// ===')
-    input('Presione una tecla para continuar')
+def mostrar_todos_los_colaboradores(gestion: GestionColaboradores):
+    print('=============== Listado completo de los  Colaboradores ==============')
+    try:
+        colaboradores = gestion.leer_todos_los_colaboradores()
+        for colaborador in colaboradores:
+            if isinstance(colaborador, ColaboradorTiempoCompleto):
+                print(f'{colaborador.dni} {colaborador.apellido} {colaborador.departamento}')
+            elif isinstance(colaborador, ColaboradorTiempoParcial):
+                print(f'{colaborador.dni} {colaborador.apellido} {colaborador.horas_semanales}')
+
+    except Exception as e:
+        print(f'Error al mostrar los colaboradores {e}')
+
+    print('=====================================================================')
+    input('Presione enter para continuar...')
 
 '''
 Cuando 'detecta' que se está ejecutando este archivo, 
 corre esta porción de código:
 '''
 if __name__ == '__main__':
-    archivo_colaboradores = 'colaboradores_db.json' # De momento este archivo no existe, vamos a crearlo via código
-    gestion_colaboradores = GestionColaboradores(archivo_colaboradores) # Instancia de la clase que implementa el CRUD // la búsqueda en JSON
+    gestion_colaboradores = GestionColaboradores() ### Instancia de la clase que implementa el CRUD
 
     while True:
         limpiar_pantalla()

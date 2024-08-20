@@ -9,7 +9,11 @@ Requisitos:
 5. Persistir los datos en archivos JSON.  
 '''
 
-import json
+#Imports necesarios
+import mysql.connector
+from mysql.connector import Error
+from decouple import config
+
 
 #Clase base
 class Colaborador: 
@@ -134,7 +138,7 @@ class ColaboradorTiempoCompleto(Colaborador):
         return data
 
     def __str__(self) -> str:
-        return f'{super().__str__()} + departamento: {self.departamento}' ### Devuelve el str de la clase base y se le agrega el departamento.
+        return f'{super().__str__()}' + f' departamento: {self.departamento}' ### Devuelve el str de la clase base y se le agrega el departamento.
     
 class ColaboradorTiempoParcial(Colaborador):
     def __init__(self, dni, nombre, apellido, edad, salario, horas_semanales) -> None:
@@ -155,31 +159,36 @@ class ColaboradorTiempoParcial(Colaborador):
 
 #Gestion
 class GestionColaboradores:
-    def __init__(self, archivo) -> None:
-        self.archivo = archivo
+    def __init__(self) -> None:
+        '''
+        Settea las variables necesarias para crear una conexión
+        al instanciar un objeto de clase GestionColaboradores
+        '''
+        self.host = config('DB_HOST')
+        self.database = config('DB_NAME')
+        self.user = config('DB_USER')
+        self.password = config('DB_PASSWORD')
+        self.port = config('DB_PORT')
     
-    def leer_datos(self):
+    def connect(self):
         '''
-        Trae los datos del JSON
+        Método para establecer la conexión con la BBDD
         '''
         try:
-            with open(self.archivo, 'r') as file:
-                datos = json.load(file)
-        except FileNotFoundError:
-            return {}
-        except Exception as e:
-            raise Exception(f'Error al leer datos del archivo: {e}')
-        else:
-            return datos
+            connection = mysql.connector.connect(
+                host = self.host,
+                database = self.database,
+                user = self.user,  
+                password = self.password,
+                port = self.port
+            )
 
-    def guardar_datos(self, datos):
-        try:
-            with open(self.archivo, 'w') as file:
-                json.dump(datos, file, indent=4)
-        except IOError as e:
-            print(f'Error al intentar guardar los datos en {self.archivo} - error: {e}')
-        except Exception as e:
-            print(f'Error inesperado: {e}')
+            if connection.is_connected():
+                return connection
+            
+        except Error as e:
+            print(f'Error al conectarse a la BBDD: {e}')
+            return None
 
     def crear_colaborador(self, colaborador):
         '''
@@ -189,65 +198,172 @@ class GestionColaboradores:
         El parámetro colaborador del método es a su vez una instancia de las subclases
         '''
         try:
-            datos = self.leer_datos() ### Lee todo lo que contiene el JSON en ese momento
-            dni = colaborador.dni ### Validacion con DNI
-            if not str(dni) in datos.keys(): ### Si no existe en datos, se crea
-                datos[dni] = colaborador.to_dict() ### Trae todos los campos de la instancia de la subclase
-                self.guardar_datos(datos) ### Todos los datos junto con lo que agregamos ahora
-                print(f'Guardado exitoso')
-            else:
-                print(f'{colaborador.dni} ya existente')
+            connection = self.connect() ### Crea (recibe) una conexión del método antes definido
+            with connection.cursor() as cursor: ### El método cursor() permite realizar consultas a la BBDD
+                ## Verificar si el DNI ya existe
+                cursor.execute('SELECT dni FROM colaboradores WHERE dni = %s', (colaborador.dni, )) ### Con el comando (comodín) evitamos inyecciones SQL /// Se le pone una coma al final porque el método espera una tupla
+                if cursor.fetchone(): ### Trae el primer registro encontrado (los DNI son únicos)
+                    print(f'Ya existe el colaborador con el dni: {colaborador.dni}')
+                    return 
+                ## Insertar colaborador dependiendo del tipo
+                if isinstance(colaborador, ColaboradorTiempoCompleto):
+                    query = '''
+                    INSERT INTO colaboradores (dni, nombre, apellido, edad, salario)
+                    VALUES (%s, %s, %s, %s, %s)
+                    '''
+
+                    cursor.execute(query, (colaborador.dni, colaborador.nombre, colaborador.apellido,
+                                           colaborador.edad, colaborador.salario))
+                    
+                    query = '''
+                    INSERT INTO colaboradortiempocompleto (dni, departamento)
+                    VALUES (%s, %s)
+                    '''
+
+                    cursor.execute(query, (colaborador.dni, colaborador.departamento))
+                elif isinstance(colaborador, ColaboradorTiempoParcial):
+                    query = '''
+                    INSERT INTO colaboradores (dni, nombre, apellido, edad, salario)
+                    VALUES (%s, %s, %s, %s, %s)
+                    '''
+
+                    cursor.execute(query, (colaborador.dni, colaborador.nombre, colaborador.apellido,
+                                           colaborador.edad, colaborador.salario))
+                    
+                    query = '''
+                    INSERT INTO colaboradortiempoparcial (dni, Horas_semanales)
+                    VALUES (%s, %s)
+                    '''
+
+                    cursor.execute(query, (colaborador.dni, colaborador.horas_semanales))
+                ## Guardar la consulta en la BBDD
+                connection.commit()
+                print(f'Colaborador {colaborador.nombre} {colaborador.apellido} creado con éxito')
         except Exception as e:
             print(f'Error inesperado al crear colaborador: {e}')
 
     def leer_colaborador(self, dni):
         '''
-        Método para buscar el colaborador (mediante CRUD o en el JSON según cómo lo apliquemos)
+        Método para buscar el colaborador mediante CRUD
         '''
-
         try:
             '''
-            Lee los datos (del JSON) y busca una key con dni
+            Hace una consulta con un DNI dado
             Si la encuentro, crea una variable para guardar los datos 
             Evalua si está presente departamento, si es así, crea una 
             instancia de ColaboradorTiempoCompleto
             '''
-            datos = self.leer_datos()
-            if dni in datos:
-                colaborador_data = datos[dni]
-                if 'departamento' in colaborador_data:
-                    colaborador = ColaboradorTiempoCompleto(**colaborador_data) ##Desempaquetador porque es un diccionario
-                else:
-                    colaborador = ColaboradorTiempoParcial(**colaborador_data)
-                print(f'Colaborador encontrado con DNI {dni}')
-            else:
-                print(f'Colaborador no encontrado con DNI {dni}')
+            connection = self.connect()
+            if connection:
+                with connection.cursor(dictionary=True) as cursor: ### Cuando el cursor devuelve la consulta lo hará en formato diccionario
+                    cursor.execute('SELECT * FROM colaboradores WHERE dni = %s', (dni,)) ### Para que Python "entienda" que es una estructura de datos tipo tupla de un solo elemento se le agrega ","
+                    colaborador_data = cursor.fetchone()
 
-        except Exception as e:
-            print(f'Error inesperado: {e}')
+                    if colaborador_data:
+                        cursor.execute('SELECT departamento FROM colaboradortiempocompleto WHERE dni = %s', (dni,))
+                        departamento = cursor.fetchone()
+
+                        if departamento:
+                            colaborador_data['departamento'] = departamento['departamento'] ### Agrega al diccionario del colaborador la información 'departamento' si la hubiese (consulta anterior)
+                            colaborador = ColaboradorTiempoCompleto(**colaborador_data) ### Pasamos todos los datos para instanciar un colaborador
+                        else: ### Quiere decir que es de tiempo parcial
+                            cursor.execute('SELECT horas_semanales FROM colaboradortiempoparcial WHERE dni = %s', (dni,))
+                            horas_semanales = cursor.fetchone()
+                            if horas_semanales:
+                                colaborador_data['horas_semanales'] = horas_semanales['horas_semanales'] ### Agrega al diccionario del colaborador la información 'departamento' si la hubiese (consulta anterior)
+                                colaborador = ColaboradorTiempoParcial(**colaborador_data)
+                            else:
+                                colaborador = Colaborador(**colaborador_data)
+                        print(f'Colaborador encontrado: {colaborador}')
+                    else:
+                        print(f'No se encontró el colaborador con DNI: {dni}')
+        except Error as e:
+            print(f'Error al leer colaborador: {e}')
+        finally:
+            if connection.is_connected():
+                connection.close()
 
     def actualizar_colaborador(self, dni, nuevo_salario):
+        '''
+        Actualizar el salario del colaborador en la BBDD
+        '''
         try:
-            datos = self.leer_datos()
-            ###Si existe el DNI accedemos a los datos y sobreescribimos el salario. Luego guardamos.
-            if str(dni) in datos.keys():
-                datos[dni]['salario'] = nuevo_salario
-                self.guardar_datos(datos)
-                print(f'Salario actualizado correctamente para el colaborador {dni}')
-            else:
-                print(f'No se encontró al colaborador {dni}')
+            connection = self.connect()
+            if  connection: ### Chequeamos que exista la conexión
+                with connection.cursor() as cursor:
+                    ### Verificar si existe DNI
+                    cursor.execute('SELECT * FROM colaboradores WHERE dni = %s', (dni,))
+                    if not cursor.fetchone(): ### Si no se encontró información es porque no existe ese DNI
+                        print(f'No se encontró colaborador con DNI: {dni}')
+                        return
+                    
+                    ### Actualizar el salario (si encuentra)
+                    cursor.execute('UPDATE colaboradores SET salario = %s WHERE dni = %s', (nuevo_salario, dni))
+
+                    if cursor.rowcount > 0: ### Si no tiene filas vacías es porque encontró un dato (es una validación)
+                        connection.commit()
+                        print(f'El nuevo salario {nuevo_salario} se actualizó correctamente para el colaborador con DNI {dni}')
+                    else:
+                        print(f'No se encontró colaborador con DNI {dni}')
+
         except Exception as e:
             print(f'Error al actualizar el colaborador: {e}')
+        finally:
+            if connection.is_connected():
+                connection.close()
 
     def eliminar_colaborador(self, dni):
         try:
-            datos = self.leer_datos()
-            ###Si existe el DNI accedemos a los datos y sobreescribimos el salario. Luego guardamos.
-            if str(dni) in datos.keys():
-                del datos[dni] # Elimina del espacio en memoria de JSON el objeto completo
-                self.guardar_datos(datos) # Para que persista debemos guardar los datos
-                print(f'Colaborador {dni} borrado correctamente')
-            else:
-                print(f'No se encontró al colaborador {dni}')
+            connection = self.connect()
+            if connection:
+                with connection.cursor() as cursor:
+                    ### Verificar si existe el DNI
+                    cursor.execute('SELECT * FROM colaboradores WHERE dni = %s', (dni,))
+                    if not cursor.fetchone():
+                        print(f'No se encontró colaborador con DNI {dni}')
+                        return 
+                    
+                    ### Eliminar colaborador
+                    cursor.execute('DELETE FROM colaboradortiempocompleto WHERE dni = %s', (dni,))
+                    cursor.execute('DELETE FROM colaboradortiempoparcial WHERE dni = %s', (dni,))
+                    cursor.execute('DELETE FROM colaboradores WHERE dni = %s', (dni,))
+                    
+                    if cursor.rowcount > 0: ### Retorna la respuesta a la última consulta realizada
+                        connection.commit()
+                        print(f'El colaborador con DNI {dni} se eliminó correctamente')
+                    else:
+                        print(f'No se encontró colaborador con el siguiente DNI: {dni}')
         except Exception as e:
             print(f'Error al eliminar el colaborador: {e}')
+        finally:
+            if connection.is_connected():
+                connection.close()
+        
+    def leer_todos_los_colaboradores(self):
+        try:
+            connection = self.connect()
+            if connection:
+                with connection.cursor(dictionary=True) as cursor:
+                    cursor.execute('SELECT * FROM colaboradores')
+                    colaboradores_data = cursor.fetchall()
+                    colaboradores = []
+                    for colaborador_data in colaboradores_data:
+                        dni = colaborador_data['dni']
+                        cursor.execute('SELECT departamento FROM colaboradortiempocompleto WHERE dni = %s', (dni,))
+                        departamento = cursor.fetchone()
+                        if departamento:
+                            colaborador_data['departamento'] = departamento['departamento']
+                            colaborador = ColaboradorTiempoCompleto(**colaborador_data)
+                        else:
+                            cursor.execute('SELECT horas_semanales FROM colaboradortiempoparcial WHERE dni = %s', (dni,))
+                            horas_semanales = cursor.fetchone()
+                            colaborador_data['horas_semanales'] = horas_semanales['horas_semanales']
+                            colaborador = ColaboradorTiempoParcial(**colaborador_data)
+                        colaboradores.append(colaborador)
+        except Exception as e:
+            print(f'Error al mostrar los colaboradores: {e}')
+        else:
+            return colaboradores
+        finally:
+            if connection.is_connected():
+                connection.close()
