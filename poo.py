@@ -9,8 +9,7 @@ Requisitos:
 5. Persistir los datos en archivos JSON.  
 '''
 
-import json
-
+#Imports necesarios
 import mysql.connector
 from mysql.connector import Error
 from decouple import config
@@ -190,30 +189,7 @@ class GestionColaboradores:
         except Error as e:
             print(f'Error al conectarse a la BBDD: {e}')
             return None
-###
-    def leer_datos(self):
-        '''
-        Trae los datos del JSON
-        '''
-        try:
-            with open(self.archivo, 'r') as file:
-                datos = json.load(file)
-        except FileNotFoundError:
-            return {}
-        except Exception as e:
-            raise Exception(f'Error al leer datos del archivo: {e}')
-        else:
-            return datos
 
-    def guardar_datos(self, datos):
-        try:
-            with open(self.archivo, 'w') as file:
-                json.dump(datos, file, indent=4)
-        except IOError as e:
-            print(f'Error al intentar guardar los datos en {self.archivo} - error: {e}')
-        except Exception as e:
-            print(f'Error inesperado: {e}')
-###
     def crear_colaborador(self, colaborador):
         '''
         Este método va a recibir una instancia de Colaborador cuando llamemos desde main.py. Es decir, recibirá un input desde el usuario
