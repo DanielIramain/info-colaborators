@@ -362,3 +362,32 @@ class GestionColaboradores:
         finally:
             if connection.is_connected():
                 connection.close()
+        
+    def leer_todos_los_colaboradores(self):
+        try:
+            connection = self.connect()
+            if connection:
+                with connection.cursor(dictionary=True) as cursor:
+                    cursor.execute('SELECT * FROM colaboradores')
+                    colaboradores_data = cursor.fetchall()
+                    colaboradores = []
+                    for colaborador_data in colaboradores_data:
+                        dni = colaborador_data['dni']
+                        cursor.execute('SELECT departamento FROM colaboradortiempocompleto WHERE dni = %s', (dni,))
+                        departamento = cursor.fetchone()
+                        if departamento:
+                            colaborador_data['departamento'] = departamento['departamento']
+                            colaborador = ColaboradorTiempoCompleto(**colaborador_data)
+                        else:
+                            cursor.execute('SELECT horas_semanales FROM colaboradortiempoparcial WHERE dni = %s', (dni,))
+                            horas_semanales = cursor.fetchone()
+                            colaborador_data['horas_semanales'] = horas_semanales['horas_semanales']
+                            colaborador = ColaboradorTiempoParcial(**colaborador_data)
+                        colaboradores.append(colaborador)
+        except Exception as e:
+            print(f'Error al mostrar los colaboradores: {e}')
+        else:
+            return colaboradores
+        finally:
+            if connection.is_connected():
+                connection.close()

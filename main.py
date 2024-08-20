@@ -81,15 +81,21 @@ def eliminar_colaborador_por_dni(gestion: GestionColaboradores):
     gestion.eliminar_colaborador(dni)
     input('Presione una tecla para continuar...')
 
-def mostrar_todos_los_colaboradores(gestion):
-    print('=== Listado completo de colaboradores ===')
-    for colaborador in gestion.leer_datos().values():
-        if 'departamento' in colaborador:
-            print(f"{colaborador['nombre']} - Departamento: {colaborador['departamento']}")
-        else:
-            print(f"{colaborador['nombre']} - Horas semanales: {colaborador['horas semanales']}")
-    print('=== /// === /// ===')
-    input('Presione una tecla para continuar')
+def mostrar_todos_los_colaboradores(gestion: GestionColaboradores):
+    print('=============== Listado completo de los  Colaboradores ==============')
+    try:
+        colaboradores = gestion.leer_todos_los_colaboradores()
+        for colaborador in colaboradores:
+            if isinstance(colaborador, ColaboradorTiempoCompleto):
+                print(f'{colaborador.dni} {colaborador.apellido} {colaborador.departamento}')
+            elif isinstance(colaborador, ColaboradorTiempoParcial):
+                print(f'{colaborador.dni} {colaborador.apellido} {colaborador.horas_semanales}')
+
+    except Exception as e:
+        print(f'Error al mostrar los colaboradores {e}')
+
+    print('=====================================================================')
+    input('Presione enter para continuar...')
 
 '''
 Cuando 'detecta' que se está ejecutando este archivo, 
